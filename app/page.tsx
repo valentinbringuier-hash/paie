@@ -7,13 +7,56 @@ import {
   CheckCircle2,
   Copy,
   FileWarning,
+  Plus,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
-import { Answers, FLOWS, FlowType, Question, labelOf } from "./lib/evpEngine";
+import { Answers, FLOWS, FlowType, Question, Result, labelOf } from "./lib/evpEngine";
+
+type ActiveFlow = Exclude<FlowType, null>;
+
+type CaseFile = {
+  caseId: string;
+  title: string;
+  period: string;
+  convention: string;
+  commonRules: string;
+  assumptions: string;
+};
+
+type EvpLine = {
+  id: string;
+  employee: string;
+  period: string;
+  label: string;
+  flow: ActiveFlow | null;
+  answers: Answers;
+  step: number;
+};
+
+const DEFAULT_CASE: CaseFile = {
+  caseId: "",
+  title: "",
+  period: "",
+  convention: "Syntec",
+  commonRules: "",
+  assumptions: "",
+};
 
 function statusClasses(status: string) {
-  if (status === "Oui") return "bg-green-100 text-green-800 border-green-200";
-  if (status === "Partiellement") return "bg-orange-100 text-orange-800 border-orange-200";
+  if (status === "Oui" || status === "Traitable") {
+    return "bg-green-100 text-green-800 border-green-200";
+  }
+
+  if (
+    status === "Partiellement" ||
+    status === "En cours" ||
+    status === "Partiellement securisee" ||
+    status === "A cadrer"
+  ) {
+    return "bg-orange-100 text-orange-800 border-orange-200";
+  }
+
   return "bg-red-100 text-red-800 border-red-200";
 }
 
@@ -57,25 +100,61 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function HomeCards({
-  onStart,
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  textarea = false,
 }: {
-  onStart: (flow: Exclude<FlowType, null>) => void;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  textarea?: boolean;
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      {textarea ? (
+        <textarea
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          rows={4}
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500"
+        />
+      ) : (
+        <input
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500"
+        />
+      )}
+    </label>
+  );
+}
+
+function FlowPicker({
+  onSelect,
+}: {
+  onSelect: (flow: ActiveFlow) => void;
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
       {Object.entries(FLOWS).map(([id, config]) => (
         <button
           key={id}
           type="button"
-          onClick={() => onStart(id as Exclude<FlowType, null>)}
-          className="rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          onClick={() => onSelect(id as ActiveFlow)}
+          className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-sm"
         >
-          <div className="mb-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-            Démarrer
+          <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+            Choisir ce parcours
           </div>
-          <div className="text-xl font-semibold text-slate-900">{config.title}</div>
-          <p className="mt-2 text-sm text-slate-600">{config.desc}</p>
+          <div className="text-base font-semibold text-slate-900">{config.title}</div>
+          <p className="mt-1 text-sm text-slate-600">{config.desc}</p>
         </button>
       ))}
     </div>
@@ -91,13 +170,7 @@ function QuestionBlock({
   onNext,
   canNext,
 }: {
-  question: {
-    id: string;
-    label: string;
-    type: "choice" | "text" | "number";
-    options?: { value: string; label: string }[];
-    placeholder?: string;
-  };
+  question: Question;
   step: number;
   total: number;
   value: string;
@@ -116,20 +189,21 @@ function QuestionBlock({
 
       {question.type === "choice" && question.options && (
         <div className="grid gap-3 sm:grid-cols-2">
-          {question.options.map((opt) => {
-            const selected = value === opt.value;
+          {question.options.map((option) => {
+            const selected = value === option.value;
+
             return (
               <button
-                key={opt.value}
+                key={option.value}
                 type="button"
-                onClick={() => onChange(opt.value)}
+                onClick={() => onChange(option.value)}
                 className={`rounded-2xl border p-4 text-left transition ${
                   selected
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-slate-200 bg-white text-slate-900 hover:border-slate-400"
                 }`}
               >
-                <span className="text-sm font-medium">{opt.label}</span>
+                <span className="text-sm font-medium">{option.label}</span>
               </button>
             );
           })}
@@ -140,7 +214,7 @@ function QuestionBlock({
         <input
           value={value}
           placeholder={question.placeholder}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(event) => onChange(event.target.value)}
           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500"
         />
       )}
@@ -150,7 +224,7 @@ function QuestionBlock({
           type="number"
           value={value}
           placeholder={question.placeholder}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(event) => onChange(event.target.value)}
           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500"
         />
       )}
@@ -171,21 +245,13 @@ function QuestionBlock({
 function ResultBlock({
   result,
 }: {
-  result: {
-    qualification: string;
-    traitement: string;
-    bulletin: string;
-    technique: string;
-    securisee: string;
-    vigilance: string[];
-    prochaineAction: string;
-  };
+  result: Result;
 }) {
   return (
     <div className="space-y-5">
       <div>
-        <p className="text-sm font-medium text-slate-500">Résultat</p>
-        <h2 className="mt-1 text-3xl font-semibold text-slate-900">Orientation paie proposée</h2>
+        <p className="text-sm font-medium text-slate-500">Resultat de ligne</p>
+        <h2 className="mt-1 text-3xl font-semibold text-slate-900">Orientation EVP proposee</h2>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -220,10 +286,10 @@ function ResultBlock({
 
       <div className="flex flex-wrap gap-3">
         <span className={`rounded-full border px-3 py-1 text-sm font-medium ${statusClasses(result.technique)}`}>
-          Réponse technique : {result.technique}
+          Reponse technique : {result.technique}
         </span>
         <span className={`rounded-full border px-3 py-1 text-sm font-medium ${statusClasses(result.securisee)}`}>
-          Réponse sécurisée : {result.securisee}
+          Reponse securisee : {result.securisee}
         </span>
       </div>
 
@@ -242,7 +308,7 @@ function ResultBlock({
           ) : (
             <div className="flex items-center gap-2 text-sm text-slate-700">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <span>Aucune vigilance majeure détectée à ce niveau de qualification.</span>
+              <span>Aucune vigilance majeure detectee a ce niveau de qualification.</span>
             </div>
           )}
         </PanelBody>
@@ -252,7 +318,7 @@ function ResultBlock({
 }
 
 function getVisibleQuestions(questions: Question[], answers: Answers) {
-  return questions.filter((q) => !q.showIf || q.showIf(answers));
+  return questions.filter((question) => !question.showIf || question.showIf(answers));
 }
 
 function pruneHiddenAnswers(questions: Question[], nextAnswers: Answers) {
@@ -274,88 +340,266 @@ function pruneHiddenAnswers(questions: Question[], nextAnswers: Answers) {
   return current;
 }
 
+function createLine(sequence: number, period: string): EvpLine {
+  return {
+    id: `EVP-${String(sequence).padStart(2, "0")}`,
+    employee: "",
+    period,
+    label: "",
+    flow: null,
+    answers: {},
+    step: 0,
+  };
+}
+
+function getNextLineSequence(lines: EvpLine[]) {
+  const numbers = lines
+    .map((line) => Number.parseInt(line.id.replace("EVP-", ""), 10))
+    .filter((value) => Number.isFinite(value));
+
+  return (numbers.length ? Math.max(...numbers) : 0) + 1;
+}
+
+function inferLineState(line: EvpLine) {
+  if (!line.flow) {
+    return {
+      flowConfig: null,
+      questions: [] as Question[],
+      visibleQuestions: [] as Question[],
+      currentQuestion: null as Question | null,
+      result: null as Result | null,
+      progress: 0,
+      status: "A cadrer",
+    };
+  }
+
+  const flowConfig = FLOWS[line.flow];
+  const visibleQuestions = getVisibleQuestions(flowConfig.questions, line.answers);
+  const safeStep = Math.min(line.step, visibleQuestions.length);
+  const currentQuestion = visibleQuestions[safeStep] ?? null;
+  const result = currentQuestion ? null : flowConfig.infer(line.answers);
+
+  let status = "En cours";
+
+  if (result) {
+    if (result.technique === "Oui" && result.securisee === "Oui") {
+      status = "Traitable";
+    } else if (result.technique === "Non") {
+      status = "Bloquee";
+    } else if (result.securisee === "Non") {
+      status = "Non securisee";
+    } else {
+      status = "Partiellement securisee";
+    }
+  }
+
+  return {
+    flowConfig,
+    questions: flowConfig.questions,
+    visibleQuestions,
+    currentQuestion,
+    result,
+    progress: Math.round((Math.min(safeStep, visibleQuestions.length) / Math.max(visibleQuestions.length, 1)) * 100),
+    status,
+  };
+}
+
+function lineSummaryLabel(line: EvpLine) {
+  if (line.label.trim()) {
+    return line.label.trim();
+  }
+
+  if (line.flow) {
+    return FLOWS[line.flow].title;
+  }
+
+  return "Parcours a choisir";
+}
+
 export default function Page() {
-  const [flow, setFlow] = useState<FlowType>(null);
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<Answers>({});
+  const [caseFile, setCaseFile] = useState<CaseFile>(DEFAULT_CASE);
+  const [lines, setLines] = useState<EvpLine[]>([createLine(1, "")]);
+  const [selectedLineId, setSelectedLineId] = useState<string>("EVP-01");
   const [copied, setCopied] = useState(false);
 
-  const currentFlow = flow ? FLOWS[flow] : null;
+  const selectedLine = lines.find((line) => line.id === selectedLineId) ?? lines[0] ?? null;
+  const selectedLineState = selectedLine ? inferLineState(selectedLine) : null;
 
-  const allQuestions = useMemo(() => currentFlow?.questions ?? [], [currentFlow]);
+  const summary = useMemo(() => {
+    const completedLines = lines.filter((line) => inferLineState(line).result);
+    const treatableLines = completedLines.filter((line) => {
+      const result = inferLineState(line).result;
+      return result?.technique === "Oui" && result.securisee === "Oui";
+    });
+    const partialLines = completedLines.filter((line) => {
+      const result = inferLineState(line).result;
+      return Boolean(result) && !(result?.technique === "Oui" && result?.securisee === "Oui") && result?.technique !== "Non";
+    });
+    const blockedLines = completedLines.filter((line) => inferLineState(line).result?.technique === "Non");
+    const unsecuredLines = completedLines.filter((line) => {
+      const result = inferLineState(line).result;
+      return result?.securisee !== "Oui";
+    });
 
-  const visibleQuestions = useMemo(() => {
-    return getVisibleQuestions(allQuestions, answers);
-  }, [allQuestions, answers]);
+    const mainVigilances = Array.from(
+      new Set(
+        completedLines
+          .flatMap((line) => inferLineState(line).result?.vigilance ?? [])
+          .filter(Boolean),
+      ),
+    ).slice(0, 5);
 
-  const visibleEntries = useMemo(() => {
-    const visibleIds = new Set(visibleQuestions.map((question) => question.id));
-    return Object.entries(answers).filter(([id]) => visibleIds.has(id));
-  }, [answers, visibleQuestions]);
+    return {
+      open: lines.length,
+      completed: completedLines.length,
+      treatable: treatableLines.length,
+      partial: partialLines.length,
+      blocked: blockedLines.length,
+      unsecured: unsecuredLines.length,
+      mainVigilances,
+    };
+  }, [lines]);
 
-  const currentQuestion = visibleQuestions[step] || null;
-  const result = currentFlow && !currentQuestion ? currentFlow.infer(answers) : null;
+  const caseSummaryText = useMemo(() => {
+    const lineSummaries = lines.map((line) => {
+      const analysis = inferLineState(line);
+      const result = analysis.result;
 
-  const progress = flow
-    ? Math.round((Math.min(step, visibleQuestions.length) / Math.max(visibleQuestions.length, 1)) * 100)
-    : 0;
+      return [
+        `- ${line.id} | ${line.employee || "Salarie a preciser"} | ${lineSummaryLabel(line)}`,
+        `  Statut : ${analysis.status}`,
+        result ? `  Action suivante : ${result.prochaineAction}` : "  Action suivante : poursuivre le cadrage",
+      ].join("\n");
+    });
 
-  const updateAnswer = (id: string, value: string) => {
-    setAnswers((prev) => pruneHiddenAnswers(allQuestions, { ...prev, [id]: value }));
+    return [
+      "Synthese dossier EVP",
+      `ID cas : ${caseFile.caseId || "A preciser"}`,
+      `Intitule : ${caseFile.title || "A preciser"}`,
+      `Periode : ${caseFile.period || "A preciser"}`,
+      `Convention : ${caseFile.convention || "A preciser"}`,
+      "",
+      `Lignes ouvertes : ${summary.open}`,
+      `Lignes completees : ${summary.completed}`,
+      `Traitable(s) : ${summary.treatable}`,
+      `Partiellement securisee(s) : ${summary.partial}`,
+      `Bloquee(s) : ${summary.blocked}`,
+      `Non totalement securisee(s) : ${summary.unsecured}`,
+      "",
+      "Lignes",
+      ...lineSummaries,
+      "",
+      "Points de vigilance",
+      ...(summary.mainVigilances.length ? summary.mainVigilances.map((item) => `- ${item}`) : ["- Aucun point majeur detecte pour le moment."]),
+    ].join("\n");
+  }, [caseFile, lines, summary]);
+
+  const patchCaseFile = (key: keyof CaseFile, value: string) => {
+    setCaseFile((current) => ({ ...current, [key]: value }));
   };
 
-  const resetAll = () => {
-    setFlow(null);
-    setStep(0);
-    setAnswers({});
+  const patchLine = (lineId: string, updater: (line: EvpLine) => EvpLine) => {
+    setLines((current) =>
+      current.map((line) => {
+        if (line.id !== lineId) {
+          return line;
+        }
+
+        return updater(line);
+      }),
+    );
+  };
+
+  const addLine = () => {
+    setLines((current) => {
+      const nextLine = createLine(getNextLineSequence(current), caseFile.period);
+      setSelectedLineId(nextLine.id);
+      return [...current, nextLine];
+    });
+  };
+
+  const removeLine = (lineId: string) => {
+    setLines((current) => {
+      if (current.length === 1) {
+        setSelectedLineId("EVP-01");
+        return [createLine(1, caseFile.period)];
+      }
+
+      const nextLines = current.filter((line) => line.id !== lineId);
+      const fallback = nextLines[0]?.id ?? "EVP-01";
+      setSelectedLineId((currentSelected) => (currentSelected === lineId ? fallback : currentSelected));
+      return nextLines;
+    });
+  };
+
+  const chooseFlow = (flow: ActiveFlow) => {
+    if (!selectedLine) {
+      return;
+    }
+
+    patchLine(selectedLine.id, (line) => ({
+      ...line,
+      flow,
+      answers: {},
+      step: 0,
+    }));
+  };
+
+  const updateSelectedAnswer = (questionId: string, value: string) => {
+    if (!selectedLine || !selectedLineState?.flowConfig) {
+      return;
+    }
+
+    patchLine(selectedLine.id, (line) => {
+      const nextAnswers = pruneHiddenAnswers(selectedLineState.flowConfig.questions, {
+        ...line.answers,
+        [questionId]: value,
+      });
+      const nextVisibleQuestions = getVisibleQuestions(selectedLineState.flowConfig.questions, nextAnswers);
+
+      return {
+        ...line,
+        answers: nextAnswers,
+        step: Math.min(line.step, nextVisibleQuestions.length),
+      };
+    });
+  };
+
+  const resetSelectedLine = () => {
+    if (!selectedLine) {
+      return;
+    }
+
+    patchLine(selectedLine.id, (line) => ({
+      ...line,
+      answers: {},
+      step: 0,
+    }));
+  };
+
+  const changeSelectedFlow = () => {
+    if (!selectedLine) {
+      return;
+    }
+
+    patchLine(selectedLine.id, (line) => ({
+      ...line,
+      flow: null,
+      answers: {},
+      step: 0,
+    }));
+  };
+
+  const resetWorkspace = () => {
+    setCaseFile(DEFAULT_CASE);
+    setLines([createLine(1, "")]);
+    setSelectedLineId("EVP-01");
     setCopied(false);
   };
 
-  const startFlow = (nextFlow: Exclude<FlowType, null>) => {
-    setFlow(nextFlow);
-    setStep(0);
-    setAnswers({});
-    setCopied(false);
-  };
-
-  const getQuestionLabel = (questionId: string) => {
-    return allQuestions.find((q) => q.id === questionId)?.label ?? questionId;
-  };
-
-  const getAnswerLabel = (questionId: string, value: string) => {
-    const question = allQuestions.find((q) => q.id === questionId);
-    if (!question) return value;
-    if (question.type === "choice") return labelOf(question.options, value);
-    return value;
-  };
-
-  const canNext = currentQuestion ? Boolean(String(answers[currentQuestion.id] ?? "").trim()) : false;
-
-  const syntheseTexte = result
-    ? [
-        "Synthèse EVP",
-        `Parcours : ${currentFlow?.title ?? ""}`,
-        "",
-        "Réponses",
-        ...visibleEntries.map(([k, v]) => `- ${getQuestionLabel(k)} : ${getAnswerLabel(k, v)}`),
-        "",
-        "Résultat",
-        `- Qualification : ${result.qualification}`,
-        `- Traitement : ${result.traitement}`,
-        `- Sortie bulletin : ${result.bulletin}`,
-        `- Réponse technique : ${result.technique}`,
-        `- Réponse sécurisée : ${result.securisee}`,
-        `- Action suivante : ${result.prochaineAction}`,
-        ...(result.vigilance.length
-          ? ["- Vigilances :", ...result.vigilance.map((x) => `  • ${x}`)]
-          : ["- Vigilances : aucune"]),
-      ].join("\n")
-    : "";
-
-  const copySynthese = async () => {
-    if (!syntheseTexte) return;
+  const copyCaseSummary = async () => {
     try {
-      await navigator.clipboard.writeText(syntheseTexte);
+      await navigator.clipboard.writeText(caseSummaryText);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -370,155 +614,416 @@ export default function Page() {
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <div className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-100">
-                Prototype paie v6
+                V2 lot 1
               </div>
-              <h1 className="text-3xl font-semibold tracking-tight">Assistant EVP interactif</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">Workspace dossier paie multi-EVP</h1>
               <p className="mt-2 max-w-3xl text-sm text-slate-300">
-                Outil en entonnoir pour guider la qualification, le traitement paie, la sortie bulletin
-                et le niveau de sécurisation d&apos;un cas EVP.
+                Cette version ne traite plus un seul tunnel. Elle ouvre un dossier, cree des lignes EVP,
+                puis utilise l assistant guidé a l interieur de chaque ligne.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={resetAll}
+              onClick={resetWorkspace}
               className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15"
             >
               <RotateCcw className="h-4 w-4" />
-              Recommencer
+              Reinitialiser le dossier
             </button>
           </div>
         </div>
 
-        {!flow && <HomeCards onStart={startFlow} />}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <Panel className="xl:col-span-1">
+            <PanelBody>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">Lignes ouvertes</p>
+                <p className="text-3xl font-semibold text-slate-900">{summary.open}</p>
+              </div>
+            </PanelBody>
+          </Panel>
 
-        {flow && currentFlow && (
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <Panel>
-              <PanelHeader
-                title="Parcours guidé"
-                right={
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                    {currentFlow.title}
-                  </span>
-                }
-              />
-              <PanelBody>
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-medium text-slate-500">
-                      <span>Progression</span>
-                      <span>{progress}%</span>
-                    </div>
-                    <ProgressBar value={progress} />
-                  </div>
+          <Panel className="xl:col-span-1">
+            <PanelBody>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">Lignes completees</p>
+                <p className="text-3xl font-semibold text-slate-900">{summary.completed}</p>
+              </div>
+            </PanelBody>
+          </Panel>
 
+          <Panel className="xl:col-span-1">
+            <PanelBody>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">Traitable(s)</p>
+                <p className="text-3xl font-semibold text-green-700">{summary.treatable}</p>
+              </div>
+            </PanelBody>
+          </Panel>
+
+          <Panel className="xl:col-span-1">
+            <PanelBody>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">Partielles</p>
+                <p className="text-3xl font-semibold text-orange-700">{summary.partial}</p>
+              </div>
+            </PanelBody>
+          </Panel>
+
+          <Panel className="xl:col-span-1">
+            <PanelBody>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-500">Bloquees</p>
+                <p className="text-3xl font-semibold text-red-700">{summary.blocked}</p>
+              </div>
+            </PanelBody>
+          </Panel>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[0.9fr_0.9fr_1.2fr]">
+          <Panel>
+            <PanelHeader title="Dossier" />
+            <PanelBody>
+              <div className="space-y-4">
+                <Field
+                  label="ID cas"
+                  value={caseFile.caseId}
+                  onChange={(value) => patchCaseFile("caseId", value)}
+                  placeholder="Ex. CAS-2025-03-EVP"
+                />
+                <Field
+                  label="Intitule"
+                  value={caseFile.title}
+                  onChange={(value) => patchCaseFile("title", value)}
+                  placeholder="Ex. Paie de mars 2025 - cas multi-EVP"
+                />
+                <Field
+                  label="Periode"
+                  value={caseFile.period}
+                  onChange={(value) => patchCaseFile("period", value)}
+                  placeholder="Ex. Mars 2025"
+                />
+                <Field
+                  label="Convention collective"
+                  value={caseFile.convention}
+                  onChange={(value) => patchCaseFile("convention", value)}
+                  placeholder="Ex. Syntec"
+                />
+                <Field
+                  label="Regles communes"
+                  value={caseFile.commonRules}
+                  onChange={(value) => patchCaseFile("commonRules", value)}
+                  placeholder="Ex. HS a 25 % puis 50 %, maladie en jours calendaires..."
+                  textarea
+                />
+                <Field
+                  label="Hypotheses generales"
+                  value={caseFile.assumptions}
+                  onChange={(value) => patchCaseFile("assumptions", value)}
+                  placeholder="Ex. justificatifs attendus, donnees manquantes, convention applicable..."
+                  textarea
+                />
+              </div>
+            </PanelBody>
+          </Panel>
+
+          <Panel>
+            <PanelHeader
+              title="Lignes EVP"
+              right={
+                <button
+                  type="button"
+                  onClick={addLine}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nouvelle ligne
+                </button>
+              }
+            />
+            <PanelBody>
+              <div className="space-y-3">
+                {lines.map((line) => {
+                  const analysis = inferLineState(line);
+                  const selected = line.id === selectedLineId;
+
+                  return (
+                    <button
+                      key={line.id}
+                      type="button"
+                      onClick={() => setSelectedLineId(line.id)}
+                      className={`w-full rounded-2xl border p-4 text-left transition ${
+                        selected
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-900 hover:border-slate-400"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium uppercase tracking-wide opacity-70">{line.id}</div>
+                          <div className="text-base font-semibold">
+                            {line.employee.trim() || "Salarie a preciser"}
+                          </div>
+                          <div className={`text-sm ${selected ? "text-slate-200" : "text-slate-600"}`}>
+                            {lineSummaryLabel(line)}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                            selected
+                              ? "border-white/20 bg-white/10 text-white"
+                              : statusClasses(analysis.status)
+                          }`}
+                        >
+                          {analysis.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        <div className={`flex items-center justify-between text-xs ${selected ? "text-slate-200" : "text-slate-500"}`}>
+                          <span>{line.flow ? FLOWS[line.flow].title : "Parcours a choisir"}</span>
+                          <span>{analysis.progress}%</span>
+                        </div>
+                        <ProgressBar value={analysis.progress} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </PanelBody>
+          </Panel>
+
+          <Panel>
+            <PanelHeader
+              title={selectedLine ? `Traitement ${selectedLine.id}` : "Traitement"}
+              right={
+                selectedLine ? (
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (step === 0) resetAll();
-                        else setStep((s) => Math.max(0, s - 1));
-                      }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      onClick={changeSelectedFlow}
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
-                      <ArrowLeft className="h-4 w-4" />
-                      Retour
+                      Changer de parcours
                     </button>
-
-                    {!currentQuestion && result && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={copySynthese}
-                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          <Copy className="h-4 w-4" />
-                          {copied ? "Synthèse copiée" : "Copier la synthèse"}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => startFlow(flow)}
-                          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                          Nouveau cas du même type
-                        </button>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      onClick={resetSelectedLine}
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Recommencer la ligne
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeLine(selectedLine.id)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Supprimer
+                    </button>
+                  </div>
+                ) : null
+              }
+            />
+            <PanelBody>
+              {!selectedLine || !selectedLineState ? (
+                <p className="text-sm text-slate-500">Aucune ligne selectionnee.</p>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field
+                      label="Salarie"
+                      value={selectedLine.employee}
+                      onChange={(value) =>
+                        patchLine(selectedLine.id, (line) => ({
+                          ...line,
+                          employee: value,
+                        }))
+                      }
+                      placeholder="Ex. Salarie A"
+                    />
+                    <Field
+                      label="Periode de ligne"
+                      value={selectedLine.period}
+                      onChange={(value) =>
+                        patchLine(selectedLine.id, (line) => ({
+                          ...line,
+                          period: value,
+                        }))
+                      }
+                      placeholder={caseFile.period || "Ex. Mars 2025"}
+                    />
                   </div>
 
-                  {currentQuestion ? (
-                    <QuestionBlock
-                      question={currentQuestion}
-                      step={step}
-                      total={visibleQuestions.length}
-                      value={answers[currentQuestion.id] || ""}
-                      onChange={(value) => updateAnswer(currentQuestion.id, value)}
-                      onNext={() => setStep((s) => s + 1)}
-                      canNext={canNext}
-                    />
-                  ) : result ? (
-                    <ResultBlock result={result} />
-                  ) : null}
-                </div>
-              </PanelBody>
-            </Panel>
+                  <Field
+                    label="Intitule libre de la ligne"
+                    value={selectedLine.label}
+                    onChange={(value) =>
+                      patchLine(selectedLine.id, (line) => ({
+                        ...line,
+                        label: value,
+                      }))
+                    }
+                    placeholder="Ex. HS mars / arret maladie / prime exceptionnelle"
+                  />
 
-            <div className="space-y-6">
-              <Panel>
-                <PanelHeader title="Réponses en cours" />
-                <PanelBody>
-                  {visibleEntries.length === 0 ? (
-                    <p className="text-sm text-slate-500">Aucune réponse pour le moment.</p>
-                  ) : (
-                    <div className="space-y-3 text-sm">
-                      {visibleEntries.map(([k, val]) => (
-                        <div key={k} className="rounded-2xl border border-slate-200 p-3">
-                          <div className="font-medium text-slate-900">{getQuestionLabel(k)}</div>
-                          <div className="mt-1 text-slate-600">{getAnswerLabel(k, val)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </PanelBody>
-              </Panel>
-
-              {result && (
-                <Panel>
-                  <PanelHeader title="Synthèse prête à partager" />
-                  <PanelBody>
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <pre className="whitespace-pre-wrap text-xs leading-6 text-slate-700">
-                        {syntheseTexte}
-                      </pre>
-                    </div>
-                  </PanelBody>
-                </Panel>
-              )}
-
-              <Panel>
-                <PanelHeader title="Pourquoi ce format ?" />
-                <PanelBody>
-                  <div className="space-y-3 text-sm text-slate-700">
-                    <p>Cette version sépare mieux l&apos;interface, les blocs de rendu et le moteur métier.</p>
-                    <p>Tu peux maintenant enrichir les règles dans `app/lib/evpEngine.ts` sans alourdir la page.</p>
-                    <div className="rounded-2xl bg-slate-100 p-4">
-                      <div className="flex items-start gap-2">
-                        <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
-                        <p>
-                          La prochaine étape logique est de passer d&apos;un tunnel unitaire à une V2
-                          dossier multi-EVP avec synthèse transverse.
+                  {!selectedLine.flow ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-slate-500">Etape 1</p>
+                        <h2 className="mt-1 text-2xl font-semibold text-slate-900">
+                          Choisir le parcours de qualification pour cette ligne
+                        </h2>
+                        <p className="mt-2 text-sm text-slate-600">
+                          L assistant reste present, mais il travaille maintenant a l interieur d une ligne EVP.
                         </p>
                       </div>
+                      <FlowPicker onSelect={chooseFlow} />
                     </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Parcours actif</p>
+                            <p className="mt-1 text-lg font-semibold text-slate-900">
+                              {selectedLineState.flowConfig?.title}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {selectedLineState.flowConfig?.desc}
+                            </p>
+                          </div>
+                          <div className="w-32">
+                            <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-500">
+                              <span>Progression</span>
+                              <span>{selectedLineState.progress}%</span>
+                            </div>
+                            <ProgressBar value={selectedLineState.progress} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            patchLine(selectedLine.id, (line) => ({
+                              ...line,
+                              step: Math.max(0, line.step - 1),
+                            }))
+                          }
+                          disabled={selectedLine.step === 0}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          Retour
+                        </button>
+
+                        {selectedLineState.result && (
+                          <button
+                            type="button"
+                            onClick={copyCaseSummary}
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            <Copy className="h-4 w-4" />
+                            {copied ? "Synthese dossier copiee" : "Copier la synthese dossier"}
+                          </button>
+                        )}
+                      </div>
+
+                      {selectedLineState.currentQuestion ? (
+                        <QuestionBlock
+                          question={selectedLineState.currentQuestion}
+                          step={Math.min(selectedLine.step, selectedLineState.visibleQuestions.length)}
+                          total={selectedLineState.visibleQuestions.length}
+                          value={selectedLine.answers[selectedLineState.currentQuestion.id] || ""}
+                          onChange={(value) => updateSelectedAnswer(selectedLineState.currentQuestion!.id, value)}
+                          onNext={() =>
+                            patchLine(selectedLine.id, (line) => ({
+                              ...line,
+                              step: Math.min(
+                                line.step + 1,
+                                selectedLineState.visibleQuestions.length,
+                              ),
+                            }))
+                          }
+                          canNext={Boolean(
+                            String(selectedLine.answers[selectedLineState.currentQuestion.id] ?? "").trim(),
+                          )}
+                        />
+                      ) : selectedLineState.result ? (
+                        <ResultBlock result={selectedLineState.result} />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
+            </PanelBody>
+          </Panel>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <Panel>
+            <PanelHeader
+              title="Synthese du dossier"
+              right={
+                <button
+                  type="button"
+                  onClick={copyCaseSummary}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  <Copy className="h-4 w-4" />
+                  {copied ? "Synthese copiee" : "Copier la synthese"}
+                </button>
+              }
+            />
+            <PanelBody>
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <pre className="whitespace-pre-wrap text-xs leading-6 text-slate-700">{caseSummaryText}</pre>
+              </div>
+            </PanelBody>
+          </Panel>
+
+          <Panel>
+            <PanelHeader title="Pourquoi cette V2 ?" />
+            <PanelBody>
+              <div className="space-y-3 text-sm text-slate-700">
+                <p>
+                  Le prototype n est plus structure comme un simple questionnaire. Il devient un poste de
+                  travail dossier avec plusieurs lignes EVP.
+                </p>
+                <p>
+                  Le moteur actuel reste utile pour qualifier une ligne, mais la vue globale permet enfin de
+                  piloter un cas multi-EVP comme l exercice VI.A.
+                </p>
+                <div className="rounded-2xl bg-slate-100 p-4">
+                  <div className="flex items-start gap-2">
+                    <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-slate-700" />
+                    <p>
+                      Le prochain lot devra ajouter la vraie logique de decoupage automatique, les pieces
+                      justificatives et les controles transverses entre lignes.
+                    </p>
                   </div>
-                </PanelBody>
-              </Panel>
-            </div>
-          </div>
-        )}
+                </div>
+                {summary.mainVigilances.length > 0 && (
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                    <p className="mb-2 text-sm font-semibold text-orange-900">Vigilances transverses</p>
+                    <ul className="space-y-2 text-sm text-orange-900">
+                      {summary.mainVigilances.map((item) => (
+                        <li key={item} className="flex gap-2">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </PanelBody>
+          </Panel>
+        </div>
       </div>
     </main>
   );
