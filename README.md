@@ -2,17 +2,17 @@
 
 Assistant paie EVP en Next.js.
 
-## Ce que contient ce dépôt
+## Ce que contient ce depot
 
-- un prototype interactif d'assistant EVP
-- des parcours guidés par thème : Temps, Absence, Versement, Frais, Fin de contrat, Autre cas
-- un moteur métier séparé dans `app/lib/evpEngine.ts`
+- un workspace V2 de dossier paie multi-EVP
+- des parcours guides par theme : Temps, Absence, Versement, Frais, Fin de contrat, Autre cas
+- un moteur metier separe dans `app/lib/evpEngine.ts`
 
 ## Lancer le projet
 
-Prérequis :
+Prerequis :
 
-- Node.js 20.9 ou supérieur d'après la documentation Next.js
+- Node.js 20.9 ou superieur
 
 Installation :
 
@@ -25,22 +25,27 @@ Puis ouvrir [http://localhost:3000](http://localhost:3000).
 
 ## Structure
 
-- `app/page.tsx` : interface du prototype
-- `app/lib/evpEngine.ts` : règles métier et questions
+- `app/page.tsx` : workspace dossier + lignes EVP + assistant de ligne
+- `app/lib/evpEngine.ts` : regles metier et questions
 - `app/globals.css` : styles globaux
 
-## Correctifs déjà intégrés
+## Ce que la V2 lot 1 apporte
 
-- purge des réponses cachées quand un changement de branche masque certaines questions
-- synthèse copiée et panneau latéral alignés sur les seules réponses visibles
-- plafonnement de la réponse sécurisée pour qu'elle ne dépasse pas la réponse technique
-- prise en compte plus explicite des justificatifs dans le parcours télétravail
+- un niveau dossier paie avec contexte commun
+- la creation et la selection de plusieurs lignes EVP
+- une synthese transverse du dossier
+- un assistant guide conserve a l interieur de chaque ligne
+- la purge des reponses cachees quand un changement de branche masque certaines questions
+- une synthese et un panneau lateral alignes sur les seules reponses visibles
+- un plafonnement de la reponse securisee pour qu elle ne depasse pas la reponse technique
+- une prise en compte plus explicite des justificatifs dans le parcours teletravail
 
-## Prochaine étape recommandée
+## Prochaine etape recommandee
 
-Faire évoluer ce prototype vers une V2 orientée dossier :
+Faire evoluer cette base V2 vers un vrai poste de travail paie :
 
-- niveau dossier paie
-- découpage en lignes EVP
+- decoupage pilote ou assiste en lignes EVP
+- pieces justificatives par ligne
 - traitement ligne par ligne
-- synthèse transverse de sécurisation
+- controles transverses entre lignes
+- synthese transverse de securisation
